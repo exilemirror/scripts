@@ -1,0 +1,50 @@
+---
+##### Drain Role & Reboot
+  - hosts: mgmtBlade
+    serial: 1
+    become_method: run_as
+
+    #vars_files:
+    # - vars/win_secret.yml
+
+    tasks:
+    - name: Task 1.0 (Drain Role)
+      script: scripts/Drain_Role_v1.0.ps1
+
+    - name: Task 1.1 (Check for errors)
+      win_stat:
+       path: c:\ansible\DrainError_log.txt
+      register: Drain_file
+    - fail:
+       msg: Drain role fail on host. Kindly verify & failback if necessary.
+      when: Drain_file.stat.exists == True
+
+    - name: Task 1.2 (Reboot Server if no errors)
+      win_reboot:
+       reboot_timeout: 7200
+       post_reboot_delay: 60
+       test_command: ipconfig
+      when: Drain_file.stat.exists == False
+
+##### FailBack
+    - name: Task 2.0 (Failback VMs)
+      script: scripts/Failback_Role_v1.0.ps1
+
+    - name: Task 2.1 (Check for errors)
+      win_stat:
+       path: c:\ansible\Failback_Error_Log.txt
+      register: Failback_file
+    - fail:
+       msg: Failback fail on host. Kindly check the logs.
+      when: Failback_file.stat.exists == True
+
+##### Check KB Details
+  - hosts: mgmtBlade
+    become_method: run_as
+
+    tasks:
+    - name: Task 3 (Get KB Patched Details)
+      win_shell: gwmi win32_quickfixengineering | sort installedon -desc | select -First 1
+      register: KB_result
+    - debug:
+       var: KB_result.stdout_lines
